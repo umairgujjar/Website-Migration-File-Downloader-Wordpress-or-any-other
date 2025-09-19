@@ -17,7 +17,7 @@ This PHP tool is designed to make downloading files from any URL simple and effi
 
 ## Installation and Setup
 1. **Download the script**: Clone or download the repository files to your local server.
-2. **Modify the destination folder**: Open the `myf.php` file and set the `$destination_folder` variable to the directory where you want to save the downloaded files.
+2. **Modify the destination folder**: Open the `import.php` file and set the `$destination_folder` variable to the directory where you want to save the downloaded files.
    - Example: `'/path/to/your/backup/folder/'`
 3. **Permissions**: Ensure the destination folder is writable by the web server to avoid permission errors.
 4. **Upload to Server**: Upload the PHP file to your web server where you want the downloads to occur.
