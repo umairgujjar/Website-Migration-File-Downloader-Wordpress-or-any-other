@@ -24,20 +24,38 @@
     </div>
 
     <?php
-    // Maximum execution time (adjust as needed)
-    // set_time_limit(24 * 60 * 60);
-
-    // Folder to save downloaded files
-    $destination_folder = '/path/to/destination/'; // Modify the path as needed
-
     if (isset($_POST['submit'])) {
         $url = $_POST['url'];
-        $newfname = $destination_folder . basename($url); // Extract file name from URL
+        
+        // Use current directory with a downloads subfolder
+        $destination_folder = __DIR__ . '/downloads/';
+        
+        // Create downloads directory if it doesn't exist
+        if (!file_exists($destination_folder)) {
+            if (!mkdir($destination_folder, 0755, true)) {
+                echo '<div class="mt-8 text-center text-red-500 font-semibold">Failed to create downloads directory.</div>';
+                exit;
+            }
+        }
+        
+        // Validate URL format
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            echo '<div class="mt-8 text-center text-red-500 font-semibold">Invalid URL format.</div>';
+            exit;
+        }
+        
+        $filename = basename(parse_url($url, PHP_URL_PATH) ?: 'downloaded_file');
+        $newfname = $destination_folder . $filename;
 
         // Use cURL to download large files efficiently
         $result = downloadDistantFile($url, $newfname);
         echo '<div class="mt-8 text-center text-gray-700">';
-        echo is_bool($result) && $result ? '<p class="text-green-500 font-semibold">File downloaded successfully!</p>' : '<p class="text-red-500 font-semibold">' . $result . '</p>';
+        if ($result === true) {
+            echo '<p class="text-green-500 font-semibold">File downloaded successfully!</p>';
+            echo '<p class="text-gray-600 mt-2">Saved as: ' . htmlspecialchars($filename) . '</p>';
+        } else {
+            echo '<p class="text-red-500 font-semibold">' . htmlspecialchars($result) . '</p>';
+        }
         echo '</div>';
     }
 
@@ -50,33 +68,67 @@
      */
     function downloadDistantFile($url, $dest)
     {
+        // Check if destination directory is writable
+        $dir = dirname($dest);
+        if (!is_writable($dir)) {
+            return "Destination directory is not writable: " . $dir;
+        }
+
         $ch = curl_init();
-        $fp = fopen($dest, 'w'); // Open the local file for writing
+        $fp = @fopen($dest, 'w');
 
         if ($fp === false) {
-            return "Failed to open local file for writing.";
+            return "Failed to open local file for writing: " . $dest;
         }
 
         // Set cURL options
         $options = [
             CURLOPT_URL => $url,
-            CURLOPT_FOLLOWLOCATION => true, // Follow redirects
-            CURLOPT_FILE => $fp, // Write output to the file
-            CURLOPT_FAILONERROR => true, // Fail if HTTP code > 400
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_FILE => $fp,
+            CURLOPT_FAILONERROR => true,
+            CURLOPT_TIMEOUT => 300, // 5 minute timeout
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            CURLOPT_SSL_VERIFYPEER => false, // Be cautious with this in production
         ];
 
         curl_setopt_array($ch, $options);
-        $return = curl_exec($ch); // Execute the request
+        $return = curl_exec($ch);
 
         if ($return === false) {
             $error_message = curl_error($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             fclose($fp);
+            
+            // Delete partially downloaded file on error
+            if (file_exists($dest)) {
+                unlink($dest);
+            }
+            
             curl_close($ch);
-            return "cURL error: " . $error_message;
+            return "Download failed (HTTP $http_code): " . $error_message;
         }
 
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         fclose($fp);
         curl_close($ch);
+
+        // Check if download was actually successful
+        if ($http_code !== 200) {
+            if (file_exists($dest)) {
+                unlink($dest);
+            }
+            return "Download failed with HTTP status: " . $http_code;
+        }
+
+        // Check if file was actually downloaded
+        if (!file_exists($dest) || filesize($dest) === 0) {
+            if (file_exists($dest)) {
+                unlink($dest);
+            }
+            return "Downloaded file is empty or failed to save.";
+        }
+
         return true;
     }
     ?>
